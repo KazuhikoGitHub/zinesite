@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>デジタルブック</title>
   
-  <!-- PDF rendering library (PDF.js) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <!-- Flipbook library (Page-Flip) -->
   <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
 
   <style>
@@ -39,19 +37,19 @@
 
     /* 上部操作バー */
     header {
-      height: 50px;
+      height: 60px;
       background-color: var(--card-bg);
       border-bottom: 1px solid var(--border-color);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px;
+      padding: 0 24px;
       box-shadow: var(--shadow);
       z-index: 100;
     }
 
     .title {
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 600;
       letter-spacing: 0.05em;
       color: var(--text-main);
@@ -60,16 +58,16 @@
     .controls {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 16px;
     }
 
     .btn {
       background-color: var(--bg-color);
       color: var(--text-main);
       border: 1px solid var(--border-color);
-      padding: 6px 14px;
+      padding: 8px 18px;
       border-radius: 20px;
-      font-size: 12px;
+      font-size: 13px;
       cursor: pointer;
       transition: all 0.2s ease;
     }
@@ -81,9 +79,9 @@
     }
 
     .page-info {
-      font-size: 13px;
+      font-size: 14px;
       color: var(--text-sub);
-      min-width: 50px;
+      min-width: 60px;
       text-align: center;
       font-variant-numeric: tabular-nums;
     }
@@ -95,9 +93,7 @@
       align-items: center;
       justify-content: center;
       position: relative;
-      padding: 16px; /* 画面端に少しだけ余白を持たせる */
-      overflow: hidden;
-      width: 100%;
+      padding: 10px;
     }
 
     #book-container {
@@ -105,8 +101,6 @@
       align-items: center;
       justify-content: center;
       visibility: hidden;
-      width: 100%;
-      height: 100%;
     }
 
     .page {
@@ -121,7 +115,7 @@
     .page canvas {
       width: 100%;
       height: 100%;
-      object-fit: contain; /* キャンバス自体の見切れも防止 */
+      object-fit: contain;
     }
 
     /* ローディング画面 */
@@ -202,7 +196,7 @@
 
         for (let i = 1; i <= totalPages; i++) {
           const page = await pdf.getPage(i);
-          const scale = 2; 
+          const scale = 2;
           const viewport = page.getViewport({ scale });
 
           const pageDiv = document.createElement('div');
@@ -225,18 +219,31 @@
           bookEl.appendChild(pageDiv);
         }
 
-        // 変更点: サイズ指定をシンプルにし、自動フィット(size: 'fit')に任せる
+        // スマホ・PC問わず見開き（2ページ分）が画面に収まるようサイズを計算
+        const maxSingleWidth = (window.innerWidth - 20) / 2;
+        const maxSingleHeight = window.innerHeight - 100;
+        const pdfRatio = pdfWidth / pdfHeight;
+
+        let targetWidth = maxSingleWidth;
+        let targetHeight = Math.round(targetWidth / pdfRatio);
+
+        if (targetHeight > maxSingleHeight) {
+          targetHeight = maxSingleHeight;
+          targetWidth = Math.round(targetHeight * pdfRatio);
+        }
+
+        // PageFlipの初期化
         const pageFlip = new St.PageFlip(bookEl, {
-          width: pdfWidth,       // PDF1ページ分の基準幅
-          height: pdfHeight,     // PDF1ページ分の基準高さ
-          size: 'fit',           // ★ stretchではなくfitにすることで見切れずにコンテナ内に最大化される
+          width: targetWidth,
+          height: targetHeight,
+          size: 'stretch',
           minWidth: 100,
-          maxWidth: 5000,        // 大画面で上限に引っかからないよう十分に大きな数値を指定
+          maxWidth: 1000,
           minHeight: 100,
-          maxHeight: 5000,
+          maxHeight: 1000,
           maxShadowOpacity: 0.15,
-          showCover: true,
-          usePortrait: false,
+          showCover: true,      // 表紙と裏表紙を単ページ表示にする
+          usePortrait: false,    // スマホなどの縦画面でも1ページモードへ自動切替させず、常に2ページ見開きを維持する
           mobileScrollSupport: false
         });
 
