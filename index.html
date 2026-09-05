@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>デジタルブック</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+
+  <style>
+    /* 落ち着いた淡い色調のカラーパレット */
+    :root {
+      --bg-color: #f7f5f0;       /* 温かみのあるナチュラルベージュ */
+      --card-bg: #ffffff;       /* ヘッダー背景 */
+      --text-main: #4a453e;     /* 落ち着いたダークブラウン・グレー */
+      --text-sub: #8c857b;      /* 控えめなサブテキスト */
+      --accent-color: #889887;  /* 淡いセージグリーン */
+      --border-color: #e5e0d8;  /* 柔らかい境界線 */
+      --shadow: 0 4px 12px rgba(70, 60, 50, 0.06);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "メイリオ", sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* 上部操作バー */
+    header {
+      height: 60px;
+      background-color: var(--card-bg);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      box-shadow: var(--shadow);
+      z-index: 100;
+    }
+
+    .title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: var(--text-main);
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .btn {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      background-color: var(--accent-color);
+      color: #ffffff;
+      border-color: var(--accent-color);
+    }
+
+    .page-info {
+      font-size: 14px;
+      color: var(--text-sub);
+      min-width: 60px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ブック表示領域 */
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      padding: 20px;
+    }
+
+    #book-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      visibility: hidden; /* 読み込み完了後に表示 */
+    }
+
+    .page {
+      background-color: #ffffff;
+      box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.03);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .page canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    /* ローディング画面 */
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      color: var(--text-sub);
+      font-size: 14px;
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--border-color);
+      border-top: 3px solid var(--accent-color);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title">冊子プレビュー</div>
+    <div class="controls">
+      <button class="btn" id="prev-btn">前へ</button>
+      <span class="page-info" id="page-info">- / -</span>
+      <button class="btn" id="next-btn">次へ</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="loading">
+      <div class="spinner"></div>
+      <div>PDFを読み込んでいます...</div>
+    </div>
+
+    <div id="book-container">
+      <div id="book"></div>
+    </div>
+  </main>
+
+  <script>
+    // PDF.js ワーカーの設定
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    async function init() {
+      const loadingEl = document.getElementById('loading');
+      const containerEl = document.getElementById('book-container');
+      const bookEl = document.getElementById('book');
+      const prevBtn = document.getElementById('prev-btn');
+      const nextBtn = document.getElementById('next-btn');
+      const pageInfo = document.getElementById('page-info');
+
+      try {
+        // sample.pdf の読み込み
+        const pdf = await pdfjsLib.getDocument('sample.pdf').promise;
+        const totalPages = pdf.numPages;
+
+        // 1ページ目のサイズから縦横比を取得
+        const page1 = await pdf.getPage(1);
+        const viewport1 = page1.getViewport({ scale: 1 });
+        const pdfWidth = viewport1.width;
+        const pdfHeight = viewport1.height;
+
+        // 全ページをCanvasとしてレンダリング
+        for (let i = 1; i <= totalPages; i++) {
+          const page = await pdf.getPage(i);
+          const scale = 2; // 高解像度（2倍）でレンダリング
+          const viewport = page.getViewport({ scale });
+
+          const pageDiv = document.createElement('div');
+          pageDiv.className = 'page';
+
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+
+          await page.render({
+            canvasContext: ctx,
+            viewport: viewport
+          }).promise;
+
+          pageDiv.appendChild(canvas);
+          bookEl.appendChild(pageDiv);
+        }
+
+        // 画面サイズに合わせたフリップブックのサイズ計算
+        const targetHeight = Math.min(window.innerHeight - 140, 720);
+        const targetWidth = Math.round(targetHeight * (pdfWidth / pdfHeight));
+
+        // PageFlipの初期化
+        const pageFlip = new St.PageFlip(bookEl, {
+          width: targetWidth,     // 1ページの幅 (px)
+          height: targetHeight,   // 1ページの高さ (px)
+          size: 'stretch',
+          minWidth: 260,
+          maxWidth: 700,
+          minHeight: 380,
+          maxHeight: 1000,
+          maxShadowOpacity: 0.15, // 落ち着いた淡いページ影
+          showCover: true,        // p1（表紙）と最終ページ（裏表紙）を単ページ表示、間を見開き表示にする
+          mobileScrollSupport: false
+        });
+
+        // HTML要素からページを読み込み
+        pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+
+        // ローディング非表示・本を表示
+        loadingEl.style.display = 'none';
+        containerEl.style.visibility = 'visible';
+
+        // ページ番号更新
+        const updatePageInfo = () => {
+          const current = pageFlip.getCurrentPageIndex() + 1;
+          pageInfo.textContent = `${current} / ${totalPages}`;
+        };
+
+        // ボタン操作イベント
+        prevBtn.addEventListener('click', () => pageFlip.flipPrev());
+        nextBtn.addEventListener('click', () => pageFlip.flipNext());
+
+        pageFlip.on('flip', updatePageInfo);
+        updatePageInfo();
+
+      } catch (error) {
+        console.error('Error loading PDF:', error);
+        loadingEl.innerHTML = '<div style="color:#a94442;">PDFの読み込みに失敗しました。<br>「sample.pdf」が正しいフォルダに配置されているか確認してください。</div>';
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
