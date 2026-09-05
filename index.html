@@ -37,19 +37,19 @@
 
     /* 上部操作バー */
     header {
-      height: 60px;
+      height: 50px; /* 領域を広く取るため少しスリム化 */
       background-color: var(--card-bg);
       border-bottom: 1px solid var(--border-color);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 24px;
+      padding: 0 16px;
       box-shadow: var(--shadow);
       z-index: 100;
     }
 
     .title {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 600;
       letter-spacing: 0.05em;
       color: var(--text-main);
@@ -58,16 +58,16 @@
     .controls {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 12px;
     }
 
     .btn {
       background-color: var(--bg-color);
       color: var(--text-main);
       border: 1px solid var(--border-color);
-      padding: 8px 18px;
+      padding: 6px 14px;
       border-radius: 20px;
-      font-size: 13px;
+      font-size: 12px;
       cursor: pointer;
       transition: all 0.2s ease;
     }
@@ -79,21 +79,22 @@
     }
 
     .page-info {
-      font-size: 14px;
+      font-size: 13px;
       color: var(--text-sub);
-      min-width: 60px;
+      min-width: 50px;
       text-align: center;
       font-variant-numeric: tabular-nums;
     }
 
-    /* ブック表示領域 */
+    /* ブック表示領域（パディングをゼロにして画面いっぱいに広げる） */
     main {
       flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
       position: relative;
-      padding: 10px;
+      padding: 0;
+      overflow: hidden;
     }
 
     #book-container {
@@ -101,6 +102,8 @@
       align-items: center;
       justify-content: center;
       visibility: hidden;
+      width: 100%;
+      height: 100%;
     }
 
     .page {
@@ -219,31 +222,43 @@
           bookEl.appendChild(pageDiv);
         }
 
-        // スマホ・PC問わず見開き（2ページ分）が画面に収まるようサイズを計算
-        const maxSingleWidth = (window.innerWidth - 20) / 2;
-        const maxSingleHeight = window.innerHeight - 100;
-        const pdfRatio = pdfWidth / pdfHeight;
+        // 画面いっぱいに広げるためのサイズ計算関数
+        const headerHeight = 50;
+        const margin = 10; // 外周の最小マージン
 
-        let targetWidth = maxSingleWidth;
-        let targetHeight = Math.round(targetWidth / pdfRatio);
+        const calculatePageSize = () => {
+          const maxSpreadWidth = window.innerWidth - margin * 2;
+          const maxHeight = window.innerHeight - headerHeight - margin * 2;
+          const spreadRatio = (pdfWidth * 2) / pdfHeight;
 
-        if (targetHeight > maxSingleHeight) {
-          targetHeight = maxSingleHeight;
-          targetWidth = Math.round(targetHeight * pdfRatio);
-        }
+          let spreadWidth = maxSpreadWidth;
+          let spreadHeight = spreadWidth / spreadRatio;
+
+          if (spreadHeight > maxHeight) {
+            spreadHeight = maxHeight;
+            spreadWidth = spreadHeight * spreadRatio;
+          }
+
+          return {
+            width: Math.round(spreadWidth / 2),
+            height: Math.round(spreadHeight)
+          };
+        };
+
+        const initialSize = calculatePageSize();
 
         // PageFlipの初期化
         const pageFlip = new St.PageFlip(bookEl, {
-          width: targetWidth,
-          height: targetHeight,
+          width: initialSize.width,
+          height: initialSize.height,
           size: 'stretch',
           minWidth: 100,
-          maxWidth: 1000,
+          maxWidth: 2000,
           minHeight: 100,
-          maxHeight: 1000,
+          maxHeight: 2000,
           maxShadowOpacity: 0.15,
-          showCover: true,      // 表紙と裏表紙を単ページ表示にする
-          usePortrait: false,    // スマホなどの縦画面でも1ページモードへ自動切替させず、常に2ページ見開きを維持する
+          showCover: true,
+          usePortrait: false,
           mobileScrollSupport: false
         });
 
@@ -251,6 +266,15 @@
 
         loadingEl.style.display = 'none';
         containerEl.style.visibility = 'visible';
+
+        // ウィンドウサイズ変更時に自動リサイズ
+        window.addEventListener('resize', () => {
+          const newSize = calculatePageSize();
+          pageFlip.update({
+            width: newSize.width,
+            height: newSize.height
+          });
+        });
 
         const updatePageInfo = () => {
           const current = pageFlip.getCurrentPageIndex() + 1;
