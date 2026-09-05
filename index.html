@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>デジタルブック</title>
   
+  <!-- PDF rendering library (PDF.js) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Flipbook library (Page-Flip) -->
   <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
 
   <style>
@@ -37,7 +39,7 @@
 
     /* 上部操作バー */
     header {
-      height: 50px; /* 領域を広く取るため少しスリム化 */
+      height: 50px;
       background-color: var(--card-bg);
       border-bottom: 1px solid var(--border-color);
       display: flex;
@@ -86,15 +88,16 @@
       font-variant-numeric: tabular-nums;
     }
 
-    /* ブック表示領域（パディングをゼロにして画面いっぱいに広げる） */
+    /* ブック表示領域 */
     main {
       flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
       position: relative;
-      padding: 0;
+      padding: 16px; /* 画面端に少しだけ余白を持たせる */
       overflow: hidden;
+      width: 100%;
     }
 
     #book-container {
@@ -118,7 +121,7 @@
     .page canvas {
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: contain; /* キャンバス自体の見切れも防止 */
     }
 
     /* ローディング画面 */
@@ -199,7 +202,7 @@
 
         for (let i = 1; i <= totalPages; i++) {
           const page = await pdf.getPage(i);
-          const scale = 2;
+          const scale = 2; 
           const viewport = page.getViewport({ scale });
 
           const pageDiv = document.createElement('div');
@@ -222,40 +225,15 @@
           bookEl.appendChild(pageDiv);
         }
 
-        // 画面いっぱいに広げるためのサイズ計算関数
-        const headerHeight = 50;
-        const margin = 10; // 外周の最小マージン
-
-        const calculatePageSize = () => {
-          const maxSpreadWidth = window.innerWidth - margin * 2;
-          const maxHeight = window.innerHeight - headerHeight - margin * 2;
-          const spreadRatio = (pdfWidth * 2) / pdfHeight;
-
-          let spreadWidth = maxSpreadWidth;
-          let spreadHeight = spreadWidth / spreadRatio;
-
-          if (spreadHeight > maxHeight) {
-            spreadHeight = maxHeight;
-            spreadWidth = spreadHeight * spreadRatio;
-          }
-
-          return {
-            width: Math.round(spreadWidth / 2),
-            height: Math.round(spreadHeight)
-          };
-        };
-
-        const initialSize = calculatePageSize();
-
-        // PageFlipの初期化
+        // 変更点: サイズ指定をシンプルにし、自動フィット(size: 'fit')に任せる
         const pageFlip = new St.PageFlip(bookEl, {
-          width: initialSize.width,
-          height: initialSize.height,
-          size: 'stretch',
+          width: pdfWidth,       // PDF1ページ分の基準幅
+          height: pdfHeight,     // PDF1ページ分の基準高さ
+          size: 'fit',           // ★ stretchではなくfitにすることで見切れずにコンテナ内に最大化される
           minWidth: 100,
-          maxWidth: 2000,
+          maxWidth: 5000,        // 大画面で上限に引っかからないよう十分に大きな数値を指定
           minHeight: 100,
-          maxHeight: 2000,
+          maxHeight: 5000,
           maxShadowOpacity: 0.15,
           showCover: true,
           usePortrait: false,
@@ -266,15 +244,6 @@
 
         loadingEl.style.display = 'none';
         containerEl.style.visibility = 'visible';
-
-        // ウィンドウサイズ変更時に自動リサイズ
-        window.addEventListener('resize', () => {
-          const newSize = calculatePageSize();
-          pageFlip.update({
-            width: newSize.width,
-            height: newSize.height
-          });
-        });
 
         const updatePageInfo = () => {
           const current = pageFlip.getCurrentPageIndex() + 1;
