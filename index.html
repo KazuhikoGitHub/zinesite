@@ -1,11 +1,9 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
   <meta charset="UTF-8">
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
-  >
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>デジタルブック</title>
 
   <!-- PDF一覧・サイト表示名の定義 -->
@@ -617,8 +615,8 @@
           button.appendChild(file);
 
           button.addEventListener('click', async () => {
-            await loadBook(book);
             closeMenu();
+            await loadBook(book);
           });
 
           li.appendChild(button);
@@ -706,107 +704,276 @@
 
       async function loadBook(book) {
         const thisLoadToken = ++loadToken;
-        currentBook = book;
-        updateMenuActive();
 
         loadingEl.style.display = 'flex';
         loadingEl.innerHTML = `
-          <div class="spinner"></div>
-          <div>${book.name} を読み込んでいます...</div>
-        `;
+    <div class="spinner"></div>
+    <div>${book.name} を読み込んでいます...</div>
+  `;
+
         containerEl.style.visibility = 'hidden';
 
+        /*
+         * 既存のPageFlipを完全に破棄
+         */
         await destroyCurrentBook();
 
         try {
+          /*
+           * PDFファイルのURLを確実に解決
+           *
+           * 例：
+           * sample2.pdf
+           * ./sample2.pdf
+           * pdf/sample2.pdf
+           *
+           * いずれも現在のHTMLを基準にした絶対URLになる
+           */
+          const pdfUrl = new URL(
+            book.file,
+            document.baseURI
+          ).href;
+
+          console.log('PDF loading:', {
+            id: book.id,
+            name: book.name,
+            file: book.file,
+            url: pdfUrl
+          });
+
+          /*
+           * PDF.jsでPDFを読み込む
+           */
           const pdf = await pdfjsLib.getDocument({
-            url: book.file,
+            url: pdfUrl,
             cMapUrl:
               'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
             cMapPacked: true
           }).promise;
 
-          if (thisLoadToken !== loadToken) return;
+          /*
+           * 別のPDFへの切り替えが始まっていたら、
+           * 今回の処理は中止
+           */
+          if (thisLoadToken !== loadToken) {
+            return;
+          }
 
+          currentBook = book;
           currentTotalPages = pdf.numPages;
 
+          /*
+           * 1ページ目からPDFの縦横比を取得
+           */
           const page1 = await pdf.getPage(1);
-          const viewport1 = page1.getViewport({ scale: 1 });
+
+          if (thisLoadToken !== loadToken) {
+            return;
+          }
+
+          const viewport1 = page1.getViewport({
+            scale: 1
+          });
+
           const pdfWidth = viewport1.width;
           const pdfHeight = viewport1.height;
+
           currentPdfRatio = pdfWidth / pdfHeight;
 
+          /*
+           * PDFをCanvasへ描画
+           */
           const renderScale = 2;
 
           for (let i = 1; i <= currentTotalPages; i++) {
+
+            if (thisLoadToken !== loadToken) {
+              return;
+            }
+
             const page = await pdf.getPage(i);
 
-            if (thisLoadToken !== loadToken) return;
+            if (thisLoadToken !== loadToken) {
+              return;
+            }
 
-            const viewport = page.getViewport({ scale: renderScale });
+            const viewport = page.getViewport({
+              scale: renderScale
+            });
+
             const pageDiv = document.createElement('div');
+
             pageDiv.className = 'page';
 
             const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d', { alpha: false });
+
+            const ctx = canvas.getContext(
+              '2d',
+              {
+                alpha: false
+              }
+            );
 
             canvas.width = Math.floor(viewport.width);
             canvas.height = Math.floor(viewport.height);
 
             ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillRect(
+              0,
+              0,
+              canvas.width,
+              canvas.height
+            );
 
             await page.render({
               canvasContext: ctx,
               viewport: viewport
             }).promise;
 
+            if (thisLoadToken !== loadToken) {
+              return;
+            }
+
             pageDiv.appendChild(canvas);
+
             bookEl.appendChild(pageDiv);
           }
 
+          /*
+           * 最終確認
+           */
+          if (thisLoadToken !== loadToken) {
+            return;
+          }
+
+          /*
+           * PageFlipのサイズ計算
+           */
           const initialSize = calculateBookSize();
 
-          pageFlip = new St.PageFlip(bookEl, {
-            width: initialSize.width,
-            height: initialSize.height,
-            size: 'stretch',
-            minWidth: 100,
-            minHeight: 100,
-            maxWidth: 2000,
-            maxHeight: 2000,
-            usePortrait: false,
-            showCover: true,
-            mobileScrollSupport: false,
-            maxShadowOpacity: 0.15,
-            useMouseEvents: true,
-            disableFlipByClick: false,
-            flippingTime: 700,
-            swipeDistance: 30
-          });
+          pageFlip = new St.PageFlip(
+            bookEl,
+            {
+              width: initialSize.width,
+              height: initialSize.height,
 
-          pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+              size: 'stretch',
 
-          pageFlip.on('flip', updatePageInfo);
+              minWidth: 100,
+              minHeight: 100,
 
+              maxWidth: 2000,
+              maxHeight: 2000,
+
+              usePortrait: false,
+
+              showCover: true,
+
+              mobileScrollSupport: false,
+
+              maxShadowOpacity: 0.15,
+
+              useMouseEvents: true,
+
+              disableFlipByClick: false,
+
+              flippingTime: 700,
+
+              swipeDistance: 30
+            }
+          );
+
+          /*
+           * 現在生成したページだけをPageFlipへ渡す
+           */
+          const pages = bookEl.querySelectorAll('.page');
+
+          pageFlip.loadFromHTML(pages);
+
+          pageFlip.on(
+            'flip',
+            updatePageInfo
+          );
+
+          /*
+           * 表示名を更新
+           */
           siteTitleEl.textContent = book.name;
+
           document.title = book.name;
+
+          /*
+           * メニューの選択状態を更新
+           */
+          updateMenuActive();
+
+          /*
+           * 表示
+           */
           loadingEl.style.display = 'none';
+
           containerEl.style.visibility = 'visible';
 
+          /*
+           * ページ情報更新
+           */
           updatePageInfo();
-          updateBookSize();
-          updateMenuActive();
-        } catch (error) {
-          console.error('Error loading PDF:', error);
 
-          if (thisLoadToken !== loadToken) return;
+          /*
+           * サイズ更新
+           */
+          updateBookSize();
+
+          updateMenuActive();
+
+          console.log(
+            'PDF loaded successfully:',
+            pdfUrl
+          );
+
+        } catch (error) {
+
+          console.error(
+            'Error loading PDF:',
+            error
+          );
+
+          if (thisLoadToken !== loadToken) {
+            return;
+          }
+
+          /*
+           * エラー時にも現在の冊子名を表示
+           */
+          currentBook = book;
 
           siteTitleEl.textContent = book.name;
+
           pageInfo.textContent = '- / -';
+
+          /*
+           * エラー内容を画面にも表示
+           */
+          const pdfUrl = new URL(
+            book.file,
+            document.baseURI
+          ).href;
+
           loadingEl.innerHTML = `
-            <div style="color:#a94442; white-space:normal; max-width:90vw;">\n              「${book.name}」のPDF読み込みに失敗しました。<br>\n              ファイル名：${book.file}<br>\n              コンソールエラーをご確認ください。\n            </div>
-          `;
+      <div style="
+        color:#a94442;
+        white-space:normal;
+        max-width:90vw;
+        line-height:1.8;
+      ">
+        「${book.name}」のPDF読み込みに失敗しました。<br>
+        ファイル名：${book.file}<br>
+        URL：${pdfUrl}<br>
+        <br>
+        ブラウザのコンソールをご確認ください。
+      </div>
+    `;
         }
       }
 
@@ -874,4 +1041,5 @@
   </script>
 
 </body>
+
 </html>
