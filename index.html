@@ -5,18 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>デジタルブック</title>
   
+  <!-- PDF rendering library (PDF.js) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Flipbook library (Page-Flip) -->
   <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
 
   <style>
     /* 落ち着いた淡い色調のカラーパレット */
     :root {
-      --bg-color: #f7f5f0;       /* 温かみのあるナチュラルベージュ */
-      --card-bg: #ffffff;       /* ヘッダー背景 */
-      --text-main: #4a453e;     /* 落ち着いたダークブラウン・グレー */
-      --text-sub: #8c857b;      /* 控えめなサブテキスト */
-      --accent-color: #889887;  /* 淡いセージグリーン */
-      --border-color: #e5e0d8;  /* 柔らかい境界線 */
+      --bg-color: #f7f5f0;
+      --card-bg: #ffffff;
+      --text-main: #4a453e;
+      --text-sub: #8c857b;
+      --accent-color: #889887;
+      --border-color: #e5e0d8;
       --shadow: 0 4px 12px rgba(70, 60, 50, 0.06);
     }
 
@@ -27,7 +29,7 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "メイリオ", sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       background-color: var(--bg-color);
       color: var(--text-main);
       display: flex;
@@ -101,7 +103,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      visibility: hidden; /* 読み込み完了後に表示 */
+      visibility: hidden;
     }
 
     .page {
@@ -183,8 +185,13 @@
       const pageInfo = document.getElementById('page-info');
 
       try {
-        // sample.pdf の読み込み
-        const pdf = await pdfjsLib.getDocument('sample.pdf').promise;
+        // ★ 変更点：日本語フォント（CMap）を読み込む設定を追加しました
+        const pdf = await pdfjsLib.getDocument({
+          url: 'sample.pdf',
+          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+          cMapPacked: true
+        }).promise;
+        
         const totalPages = pdf.numPages;
 
         // 1ページ目のサイズから縦横比を取得
@@ -207,6 +214,10 @@
           canvas.width = viewport.width;
           canvas.height = viewport.height;
 
+          // ★ 変更点：背景を白で塗りつぶしてからPDFを描画（透過によるチラつき防止）
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
           await page.render({
             canvasContext: ctx,
             viewport: viewport
@@ -222,15 +233,15 @@
 
         // PageFlipの初期化
         const pageFlip = new St.PageFlip(bookEl, {
-          width: targetWidth,     // 1ページの幅 (px)
-          height: targetHeight,   // 1ページの高さ (px)
+          width: targetWidth,
+          height: targetHeight,
           size: 'stretch',
           minWidth: 260,
           maxWidth: 700,
           minHeight: 380,
           maxHeight: 1000,
-          maxShadowOpacity: 0.15, // 落ち着いた淡いページ影
-          showCover: true,        // p1（表紙）と最終ページ（裏表紙）を単ページ表示、間を見開き表示にする
+          maxShadowOpacity: 0.15,
+          showCover: true,
           mobileScrollSupport: false
         });
 
@@ -256,7 +267,7 @@
 
       } catch (error) {
         console.error('Error loading PDF:', error);
-        loadingEl.innerHTML = '<div style="color:#a94442;">PDFの読み込みに失敗しました。<br>「sample.pdf」が正しいフォルダに配置されているか確認してください。</div>';
+        loadingEl.innerHTML = '<div style="color:#a94442;">PDFの描画に失敗しました。<br>コンソールエラーをご確認ください。</div>';
       }
     }
 
