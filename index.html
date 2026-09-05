@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>デジタルブック</title>
   
+  <!-- PDF rendering library (PDF.js) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Flipbook library (Page-Flip) -->
   <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
 
   <style>
-    /* 落ち着いた淡い色調のカラーパレット */
     :root {
       --bg-color: #f7f5f0;
       --card-bg: #ffffff;
@@ -93,9 +94,14 @@
       justify-content: center;
       position: relative;
       padding: 20px;
+      /* 追加: はみ出しを防ぐ */
+      width: 100%;
     }
 
     #book-container {
+      /* 修正: 親要素の幅と高さを最大化し、見開きのスペースを確保 */
+      width: 100%;
+      height: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -111,12 +117,11 @@
       overflow: hidden;
     }
 
-    /* 修正：画像として表示するためのスタイル */
     .page img {
       width: 100%;
       height: 100%;
       object-fit: contain;
-      pointer-events: none; /* 画像のドラッグ操作を無効化 */
+      pointer-events: none;
     }
 
     #loading {
@@ -181,7 +186,6 @@
       const pageInfo = document.getElementById('page-info');
 
       try {
-        // 標準フォントがない場合の文字欠けを防ぐ設定も追加
         const pdf = await pdfjsLib.getDocument({
           url: 'sample.pdf',
           cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
@@ -198,19 +202,17 @@
 
         for (let i = 1; i <= totalPages; i++) {
           const page = await pdf.getPage(i);
-          const scale = 2; // 高解像度でレンダリング
+          const scale = 2;
           const viewport = page.getViewport({ scale });
 
           const pageDiv = document.createElement('div');
           pageDiv.className = 'page';
 
-          // 一旦Canvasに描画する
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           canvas.width = viewport.width;
           canvas.height = viewport.height;
 
-          // 背景を白で塗りつぶす
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -219,8 +221,6 @@
             viewport: viewport
           }).promise;
 
-          // ★修正：描画したCanvasを画像（JPEG）に変換する
-          // これにより3Dアニメーション時の白飛びを完全に防止します
           const img = document.createElement('img');
           img.src = canvas.toDataURL('image/jpeg', 0.95);
 
@@ -228,19 +228,14 @@
           bookEl.appendChild(pageDiv);
         }
 
-        const targetHeight = Math.min(window.innerHeight - 140, 720);
-        const targetWidth = Math.round(targetHeight * (pdfWidth / pdfHeight));
-
+        // ★ 変更点：見開き表示にするための設定
         const pageFlip = new St.PageFlip(bookEl, {
-          width: targetWidth,
-          height: targetHeight,
-          size: 'stretch',
-          minWidth: 260,
-          maxWidth: 700,
-          minHeight: 380,
-          maxHeight: 1000,
+          width: pdfWidth,        // PDFの本来の横幅を基準にする
+          height: pdfHeight,      // PDFの本来の縦幅を基準にする
+          size: 'fit',            // stretchからfitに変更：画面に合わせて見開きを綺麗に収める
+          showCover: true,        // p1（表紙）と最終ページ（裏表紙）は1ページ表示
+          usePortrait: false,     // ★追加：1ページ表示モードを無効化し、常に見開きを強制する
           maxShadowOpacity: 0.15,
-          showCover: true,
           mobileScrollSupport: false
         });
 
