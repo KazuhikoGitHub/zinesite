@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>デジタルブック</title>
   
+  <!-- PDF rendering library (PDF.js) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Flipbook library (Page-Flip) -->
   <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
 
   <style>
@@ -36,6 +38,7 @@
       overflow: hidden;
     }
 
+    /* 上部操作バー */
     header {
       height: 60px;
       background-color: var(--card-bg);
@@ -86,6 +89,7 @@
       font-variant-numeric: tabular-nums;
     }
 
+    /* ブック表示領域 */
     main {
       flex: 1;
       display: flex;
@@ -111,14 +115,13 @@
       overflow: hidden;
     }
 
-    /* 修正：画像として表示するためのスタイル */
-    .page img {
+    .page canvas {
       width: 100%;
       height: 100%;
       object-fit: contain;
-      pointer-events: none; /* 画像のドラッグ操作を無効化 */
     }
 
+    /* ローディング画面 */
     #loading {
       position: absolute;
       top: 50%;
@@ -161,7 +164,7 @@
   <main>
     <div id="loading">
       <div class="spinner"></div>
-      <div>PDFを描画しています...</div>
+      <div>PDFを読み込んでいます...</div>
     </div>
 
     <div id="book-container">
@@ -170,6 +173,7 @@
   </main>
 
   <script>
+    // PDF.js ワーカーの設定
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     async function init() {
@@ -181,36 +185,36 @@
       const pageInfo = document.getElementById('page-info');
 
       try {
-        // 標準フォントがない場合の文字欠けを防ぐ設定も追加
+        // ★ 変更点：日本語フォント（CMap）を読み込む設定を追加しました
         const pdf = await pdfjsLib.getDocument({
           url: 'sample.pdf',
           cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
-          cMapPacked: true,
-          standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/',
+          cMapPacked: true
         }).promise;
         
         const totalPages = pdf.numPages;
 
+        // 1ページ目のサイズから縦横比を取得
         const page1 = await pdf.getPage(1);
         const viewport1 = page1.getViewport({ scale: 1 });
         const pdfWidth = viewport1.width;
         const pdfHeight = viewport1.height;
 
+        // 全ページをCanvasとしてレンダリング
         for (let i = 1; i <= totalPages; i++) {
           const page = await pdf.getPage(i);
-          const scale = 2; // 高解像度でレンダリング
+          const scale = 2; // 高解像度（2倍）でレンダリング
           const viewport = page.getViewport({ scale });
 
           const pageDiv = document.createElement('div');
           pageDiv.className = 'page';
 
-          // 一旦Canvasに描画する
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           canvas.width = viewport.width;
           canvas.height = viewport.height;
 
-          // 背景を白で塗りつぶす
+          // ★ 変更点：背景を白で塗りつぶしてからPDFを描画（透過によるチラつき防止）
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -219,18 +223,15 @@
             viewport: viewport
           }).promise;
 
-          // ★修正：描画したCanvasを画像（JPEG）に変換する
-          // これにより3Dアニメーション時の白飛びを完全に防止します
-          const img = document.createElement('img');
-          img.src = canvas.toDataURL('image/jpeg', 0.95);
-
-          pageDiv.appendChild(img);
+          pageDiv.appendChild(canvas);
           bookEl.appendChild(pageDiv);
         }
 
+        // 画面サイズに合わせたフリップブックのサイズ計算
         const targetHeight = Math.min(window.innerHeight - 140, 720);
         const targetWidth = Math.round(targetHeight * (pdfWidth / pdfHeight));
 
+        // PageFlipの初期化
         const pageFlip = new St.PageFlip(bookEl, {
           width: targetWidth,
           height: targetHeight,
@@ -244,16 +245,20 @@
           mobileScrollSupport: false
         });
 
+        // HTML要素からページを読み込み
         pageFlip.loadFromHTML(document.querySelectorAll('.page'));
 
+        // ローディング非表示・本を表示
         loadingEl.style.display = 'none';
         containerEl.style.visibility = 'visible';
 
+        // ページ番号更新
         const updatePageInfo = () => {
           const current = pageFlip.getCurrentPageIndex() + 1;
           pageInfo.textContent = `${current} / ${totalPages}`;
         };
 
+        // ボタン操作イベント
         prevBtn.addEventListener('click', () => pageFlip.flipPrev());
         nextBtn.addEventListener('click', () => pageFlip.flipNext());
 
@@ -262,7 +267,7 @@
 
       } catch (error) {
         console.error('Error loading PDF:', error);
-        loadingEl.innerHTML = '<div style="color:#a94442;">エラーが発生しました。<br>コンソールをご確認ください。</div>';
+        loadingEl.innerHTML = '<div style="color:#a94442;">PDFの描画に失敗しました。<br>コンソールエラーをご確認ください。</div>';
       }
     }
 
