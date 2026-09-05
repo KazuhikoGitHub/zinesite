@@ -2,9 +2,12 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  >
   <title>デジタルブック</title>
-  
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
 
@@ -25,26 +28,58 @@
       padding: 0;
     }
 
+    html,
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background-color: var(--bg-color);
-      color: var(--text-main);
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
     }
 
-    /* 上部操作バー */
+    body {
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        "Helvetica Neue",
+        Arial,
+        sans-serif;
+
+      background-color: var(--bg-color);
+      color: var(--text-main);
+
+      display: flex;
+      flex-direction: column;
+
+      /*
+       * 100dvh:
+       * スマホブラウザのアドレスバーなどを考慮した
+       * 実際の表示領域を使いやすくする
+       */
+      height: 100dvh;
+
+      overflow: hidden;
+    }
+
+    /* ========================================
+       上部操作バー
+       ======================================== */
+
     header {
+      flex: 0 0 60px;
       height: 60px;
+
       background-color: var(--card-bg);
       border-bottom: 1px solid var(--border-color);
+
       display: flex;
       align-items: center;
       justify-content: space-between;
+
       padding: 0 24px;
+
       box-shadow: var(--shadow);
+
       z-index: 100;
     }
 
@@ -53,6 +88,8 @@
       font-weight: 600;
       letter-spacing: 0.05em;
       color: var(--text-main);
+
+      white-space: nowrap;
     }
 
     .controls {
@@ -64,12 +101,20 @@
     .btn {
       background-color: var(--bg-color);
       color: var(--text-main);
+
       border: 1px solid var(--border-color);
+
       padding: 8px 18px;
       border-radius: 20px;
+
       font-size: 13px;
+
       cursor: pointer;
+
       transition: all 0.2s ease;
+
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
     }
 
     .btn:hover {
@@ -81,195 +126,956 @@
     .page-info {
       font-size: 14px;
       color: var(--text-sub);
+
       min-width: 60px;
+
       text-align: center;
+
       font-variant-numeric: tabular-nums;
+
+      white-space: nowrap;
     }
 
-    /* ブック表示領域 */
+    /* ========================================
+       ブック表示領域
+       ======================================== */
+
     main {
       flex: 1;
+
+      width: 100%;
+      min-width: 0;
+      min-height: 0;
+
       display: flex;
       align-items: center;
       justify-content: center;
+
       position: relative;
-      padding: 10px;
+
+      /*
+       * 余白を極力なくす
+       */
+      padding: 0;
+
+      overflow: hidden;
+
+      /*
+       * iPhone等のセーフエリア
+       */
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
     }
 
     #book-container {
+      width: 100%;
+      height: 100%;
+
+      display: flex;
+
+      align-items: center;
+      justify-content: center;
+
+      visibility: hidden;
+
+      overflow: hidden;
+
+      position: relative;
+    }
+
+    /*
+     * PageFlipの親
+     */
+    #book {
+      position: relative;
+
       display: flex;
       align-items: center;
       justify-content: center;
-      visibility: hidden;
+
+      /*
+       * PageFlipが親要素のサイズを基準に
+       * 描画できるようにする
+       */
+      transform-origin: center center;
     }
 
     .page {
       background-color: #ffffff;
-      box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.03);
+
+      box-shadow:
+        inset 0 0 10px rgba(0, 0, 0, 0.03);
+
       display: flex;
       align-items: center;
       justify-content: center;
+
       overflow: hidden;
+
+      /*
+       * ページの縦横比を崩さない
+       */
+      contain: layout paint;
     }
 
     .page canvas {
+      display: block;
+
       width: 100%;
       height: 100%;
+
       object-fit: contain;
+
+      /*
+       * Canvasのぼやけをできるだけ抑える
+       */
+      image-rendering: auto;
     }
 
-    /* ローディング画面 */
+    /* ========================================
+       ローディング画面
+       ======================================== */
+
     #loading {
       position: absolute;
+
       top: 50%;
       left: 50%;
+
       transform: translate(-50%, -50%);
+
       display: flex;
+
       flex-direction: column;
       align-items: center;
+
       gap: 16px;
+
       color: var(--text-sub);
+
       font-size: 14px;
+
+      z-index: 200;
+
+      text-align: center;
+
+      white-space: nowrap;
     }
 
     .spinner {
       width: 36px;
       height: 36px;
+
       border: 3px solid var(--border-color);
       border-top: 3px solid var(--accent-color);
+
       border-radius: 50%;
+
       animation: spin 0.8s linear infinite;
     }
 
     @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ========================================
+       スマホ
+       ======================================== */
+
+    @media (max-width: 600px) {
+      header {
+        flex-basis: 52px;
+        height: 52px;
+
+        padding: 0 10px;
+      }
+
+      .title {
+        font-size: 13px;
+      }
+
+      .controls {
+        gap: 6px;
+      }
+
+      .btn {
+        padding: 7px 12px;
+        font-size: 12px;
+      }
+
+      .page-info {
+        font-size: 12px;
+        min-width: 50px;
+      }
+    }
+
+    /* ========================================
+       非常に横幅の狭いスマホ
+       ======================================== */
+
+    @media (max-width: 380px) {
+      .title {
+        display: none;
+      }
+
+      header {
+        justify-content: flex-end;
+      }
     }
   </style>
 </head>
+
 <body>
+
+  <!-- ========================================
+       ヘッダー
+       ======================================== -->
 
   <header>
     <div class="title">冊子プレビュー</div>
+
     <div class="controls">
-      <button class="btn" id="prev-btn">前へ</button>
-      <span class="page-info" id="page-info">- / -</span>
-      <button class="btn" id="next-btn">次へ</button>
+      <button class="btn" id="prev-btn">
+        前へ
+      </button>
+
+      <span class="page-info" id="page-info">
+        - / -
+      </span>
+
+      <button class="btn" id="next-btn">
+        次へ
+      </button>
     </div>
   </header>
 
+
+  <!-- ========================================
+       メイン
+       ======================================== -->
+
   <main>
+
+    <!-- ローディング -->
     <div id="loading">
       <div class="spinner"></div>
       <div>PDFを読み込んでいます...</div>
     </div>
 
+    <!-- ブック -->
     <div id="book-container">
       <div id="book"></div>
     </div>
+
   </main>
 
+
   <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    /*
+     * ========================================
+     * PDF.js Worker
+     * ========================================
+     */
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+
+    /*
+     * ========================================
+     * 初期化
+     * ========================================
+     */
 
     async function init() {
-      const loadingEl = document.getElementById('loading');
-      const containerEl = document.getElementById('book-container');
-      const bookEl = document.getElementById('book');
-      const prevBtn = document.getElementById('prev-btn');
-      const nextBtn = document.getElementById('next-btn');
-      const pageInfo = document.getElementById('page-info');
+
+      const loadingEl =
+        document.getElementById('loading');
+
+      const containerEl =
+        document.getElementById('book-container');
+
+      const bookEl =
+        document.getElementById('book');
+
+      const prevBtn =
+        document.getElementById('prev-btn');
+
+      const nextBtn =
+        document.getElementById('next-btn');
+
+      const pageInfo =
+        document.getElementById('page-info');
+
+
+      /*
+       * PageFlip本体を保持
+       */
+      let pageFlip = null;
+
+
+      /*
+       * リサイズ処理のタイマー
+       */
+      let resizeTimer = null;
+
 
       try {
+
+        /*
+         * ========================================
+         * PDF読み込み
+         * ========================================
+         */
+
         const pdf = await pdfjsLib.getDocument({
           url: 'sample.pdf',
-          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+
+          cMapUrl:
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+
           cMapPacked: true
+
         }).promise;
-        
+
+
         const totalPages = pdf.numPages;
 
-        const page1 = await pdf.getPage(1);
-        const viewport1 = page1.getViewport({ scale: 1 });
-        const pdfWidth = viewport1.width;
-        const pdfHeight = viewport1.height;
 
-        for (let i = 1; i <= totalPages; i++) {
-          const page = await pdf.getPage(i);
-          const scale = 2;
-          const viewport = page.getViewport({ scale });
+        /*
+         * ========================================
+         * 1ページ目からPDFサイズを取得
+         * ========================================
+         */
 
-          const pageDiv = document.createElement('div');
+        const page1 =
+          await pdf.getPage(1);
+
+        const viewport1 =
+          page1.getViewport({
+            scale: 1
+          });
+
+
+        const pdfWidth =
+          viewport1.width;
+
+        const pdfHeight =
+          viewport1.height;
+
+
+        /*
+         * PDFの縦横比
+         *
+         * 例：
+         * A4縦なら約 0.707
+         */
+        const pdfRatio =
+          pdfWidth / pdfHeight;
+
+
+        /*
+         * ========================================
+         * PDFページをCanvasに描画
+         * ========================================
+         *
+         * scale 2 で描画して、
+         * 表示時の拡大にある程度耐えられるようにする
+         */
+
+        const renderScale = 2;
+
+
+        for (
+          let i = 1;
+          i <= totalPages;
+          i++
+        ) {
+
+          const page =
+            await pdf.getPage(i);
+
+
+          const viewport =
+            page.getViewport({
+              scale: renderScale
+            });
+
+
+          /*
+           * ページDIV
+           */
+          const pageDiv =
+            document.createElement('div');
+
           pageDiv.className = 'page';
 
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
 
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          /*
+           * Canvas
+           */
+          const canvas =
+            document.createElement('canvas');
 
+
+          const ctx =
+            canvas.getContext('2d', {
+              alpha: false
+            });
+
+
+          /*
+           * Canvasの実サイズ
+           */
+          canvas.width =
+            Math.floor(viewport.width);
+
+          canvas.height =
+            Math.floor(viewport.height);
+
+
+          /*
+           * 白背景
+           */
+          ctx.fillStyle =
+            '#ffffff';
+
+          ctx.fillRect(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+          );
+
+
+          /*
+           * PDF描画
+           */
           await page.render({
             canvasContext: ctx,
             viewport: viewport
           }).promise;
 
+
           pageDiv.appendChild(canvas);
+
           bookEl.appendChild(pageDiv);
         }
 
-        // スマホ・PC問わず見開き（2ページ分）が画面に収まるようサイズを計算
-        const maxSingleWidth = (window.innerWidth - 20) / 2;
-        const maxSingleHeight = window.innerHeight - 100;
-        const pdfRatio = pdfWidth / pdfHeight;
 
-        let targetWidth = maxSingleWidth;
-        let targetHeight = Math.round(targetWidth / pdfRatio);
+        /*
+         * ========================================
+         * ブックサイズ計算
+         * ========================================
+         *
+         * 重要：
+         *
+         * このブックは「常に2ページ見開き」です。
+         *
+         * そのため、
+         *
+         *   見開き幅 = 1ページ幅 × 2
+         *
+         * として計算します。
+         *
+         * スマホでも1ページだけにはしません。
+         */
 
-        if (targetHeight > maxSingleHeight) {
-          targetHeight = maxSingleHeight;
-          targetWidth = Math.round(targetHeight * pdfRatio);
+        function calculateBookSize() {
+
+          /*
+           * headerの現在の高さを取得
+           *
+           * PC：60px
+           * スマホ：52px
+           */
+          const headerHeight =
+            document
+              .querySelector('header')
+              .getBoundingClientRect()
+              .height;
+
+
+          /*
+           * 画面全体のサイズ
+           */
+          const viewportWidth =
+            window.innerWidth;
+
+          /*
+           * visualViewportが使える場合は、
+           * スマホのブラウザUI変化も考慮
+           */
+          const viewportHeight =
+            window.visualViewport
+              ? window.visualViewport.height
+              : window.innerHeight;
+
+
+          /*
+           * ブックを置ける領域
+           */
+          const availableWidth =
+            Math.max(
+              1,
+              viewportWidth
+            );
+
+
+          const availableHeight =
+            Math.max(
+              1,
+              viewportHeight - headerHeight
+            );
+
+
+          /*
+           * 少しだけ安全マージンを取る
+           *
+           * ここを0にすると、
+           * 本当にギリギリまで大きくできます。
+           *
+           * 今回は5pxだけにします。
+           */
+          const margin = 5;
+
+
+          const usableWidth =
+            Math.max(
+              1,
+              availableWidth - margin * 2
+            );
+
+
+          const usableHeight =
+            Math.max(
+              1,
+              availableHeight - margin * 2
+            );
+
+
+          /*
+           * ----------------------------------------
+           * 高さから決める場合
+           * ----------------------------------------
+           *
+           * 1ページ高さ = usableHeight
+           *
+           * 1ページ幅 =
+           *     高さ × PDF縦横比
+           *
+           * 見開き幅 =
+           *     1ページ幅 × 2
+           */
+          let pageHeight =
+            usableHeight;
+
+          let pageWidth =
+            pageHeight * pdfRatio;
+
+
+          let spreadWidth =
+            pageWidth * 2;
+
+
+          /*
+           * ----------------------------------------
+           * 横幅から決める場合
+           * ----------------------------------------
+           *
+           * 見開きが画面幅からはみ出すなら、
+           * 横幅を基準に縮小します。
+           */
+          if (spreadWidth > usableWidth) {
+
+            spreadWidth =
+              usableWidth;
+
+            pageWidth =
+              spreadWidth / 2;
+
+            pageHeight =
+              pageWidth / pdfRatio;
+          }
+
+
+          /*
+           * PageFlipに渡すのは「1ページ」の幅と高さ
+           *
+           * landscape（見開き）の場合、
+           * 実際のブック全体は2ページ分になります。
+           */
+          return {
+            width: Math.floor(pageWidth),
+            height: Math.floor(pageHeight)
+          };
         }
 
-        // PageFlipの初期化
-        const pageFlip = new St.PageFlip(bookEl, {
-          width: targetWidth,
-          height: targetHeight,
-          size: 'stretch',
-          minWidth: 100,
-          maxWidth: 1000,
-          minHeight: 100,
-          maxHeight: 1000,
-          maxShadowOpacity: 0.15,
-          showCover: true,      // 表紙と裏表紙を単ページ表示にする
-          usePortrait: false,    // スマホなどの縦画面でも1ページモードへ自動切替させず、常に2ページ見開きを維持する
-          mobileScrollSupport: false
-        });
 
-        pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+        /*
+         * ========================================
+         * 初期サイズ
+         * ========================================
+         */
+
+        const initialSize =
+          calculateBookSize();
+
+
+        /*
+         * ========================================
+         * PageFlip初期化
+         * ========================================
+         */
+
+        pageFlip =
+          new St.PageFlip(
+            bookEl,
+            {
+
+              /*
+               * 1ページの基準サイズ
+               */
+              width:
+                initialSize.width,
+
+              height:
+                initialSize.height,
+
+
+              /*
+               * 親要素に合わせて伸縮
+               */
+              size: 'stretch',
+
+
+              /*
+               * 最小サイズ
+               */
+              minWidth: 100,
+              minHeight: 100,
+
+
+              /*
+               * 大型PCでも十分なサイズを許可
+               */
+              maxWidth: 2000,
+              maxHeight: 2000,
+
+
+              /*
+               * ========================================
+               * 最重要
+               * ========================================
+               *
+               * true  = 縦画面では1ページになる
+               * false = 2ページ見開きを維持
+               */
+              usePortrait: false,
+
+
+              /*
+               * 表紙も単ページ扱いにしない
+               *
+               * trueにすると表紙が1ページ表示になるため、
+               * 「常に2ページ」という今回の要件ではfalse。
+               */
+              showCover: false,
+
+
+              /*
+               * スマホのスクロールを無効化
+               */
+              mobileScrollSupport: false,
+
+
+              /*
+               * 影
+               */
+              maxShadowOpacity: 0.15,
+
+
+              /*
+               * タッチ・マウス操作
+               */
+              useMouseEvents: true,
+
+
+              /*
+               * ページをクリックしてめくる
+               */
+              disableFlipByClick: false,
+
+              /*
+               * ページめくり速度
+               */
+              flippingTime: 700,
+
+              /*
+               * スワイプ距離
+               */
+              swipeDistance: 30
+
+            }
+          );
+
+
+        /*
+         * ========================================
+         * ページを読み込む
+         * ========================================
+         */
+
+        pageFlip.loadFromHTML(
+          document.querySelectorAll('.page')
+        );
+
+
+        /*
+         * ========================================
+         * 表示開始
+         * ========================================
+         */
 
         loadingEl.style.display = 'none';
-        containerEl.style.visibility = 'visible';
 
-        const updatePageInfo = () => {
-          const current = pageFlip.getCurrentPageIndex() + 1;
-          pageInfo.textContent = `${current} / ${totalPages}`;
-        };
+        containerEl.style.visibility =
+          'visible';
 
-        prevBtn.addEventListener('click', () => pageFlip.flipPrev());
-        nextBtn.addEventListener('click', () => pageFlip.flipNext());
 
-        pageFlip.on('flip', updatePageInfo);
+        /*
+         * ========================================
+         * ページ番号更新
+         * ========================================
+         */
+
+        function updatePageInfo() {
+
+          const current =
+            pageFlip.getCurrentPageIndex() + 1;
+
+
+          /*
+           * 「現在のページ / 総ページ数」
+           */
+          pageInfo.textContent =
+            `${current} / ${totalPages}`;
+        }
+
+
         updatePageInfo();
 
+
+        /*
+         * ========================================
+         * 前へ
+         * ========================================
+         */
+
+        prevBtn.addEventListener(
+          'click',
+          () => {
+
+            pageFlip.flipPrev();
+
+          }
+        );
+
+
+        /*
+         * ========================================
+         * 次へ
+         * ========================================
+         */
+
+        nextBtn.addEventListener(
+          'click',
+          () => {
+
+            pageFlip.flipNext();
+
+          }
+        );
+
+
+        /*
+         * ========================================
+         * ページめくりイベント
+         * ========================================
+         */
+
+        pageFlip.on(
+          'flip',
+          updatePageInfo
+        );
+
+
+        /*
+         * ========================================
+         * 画面サイズ変更
+         * ========================================
+         *
+         * PageFlip 2.0.7には
+         * update() が用意されているため、
+         * レイアウト変更後に再描画させます。
+         */
+
+        function updateBookSize() {
+
+          if (!pageFlip) {
+            return;
+          }
+
+
+          const size =
+            calculateBookSize();
+
+
+          /*
+           * PageFlipの親要素のサイズを調整
+           *
+           * 1ページ幅 × 2
+           */
+          bookEl.style.width =
+            `${size.width * 2}px`;
+
+          bookEl.style.height =
+            `${size.height}px`;
+
+
+          /*
+           * PageFlip内部の再描画
+           */
+          pageFlip.update();
+        }
+
+
+        /*
+         * 初回にもサイズを適用
+         */
+        updateBookSize();
+
+
+        /*
+         * ========================================
+         * window resize
+         * ========================================
+         */
+
+        window.addEventListener(
+          'resize',
+          () => {
+
+            clearTimeout(resizeTimer);
+
+            resizeTimer =
+              setTimeout(
+                () => {
+
+                  updateBookSize();
+
+                },
+                100
+              );
+
+          }
+        );
+
+
+        /*
+         * ========================================
+         * visualViewport resize
+         * ========================================
+         *
+         * iPhone / Androidの
+         * アドレスバー表示・非表示などにも対応
+         */
+
+        if (window.visualViewport) {
+
+          window.visualViewport.addEventListener(
+            'resize',
+            () => {
+
+              clearTimeout(resizeTimer);
+
+              resizeTimer =
+                setTimeout(
+                  () => {
+
+                    updateBookSize();
+
+                  },
+                  100
+                );
+
+            }
+          );
+
+        }
+
+
+        /*
+         * ========================================
+         * 画面回転
+         * ========================================
+         */
+
+        window.addEventListener(
+          'orientationchange',
+          () => {
+
+            setTimeout(
+              () => {
+
+                updateBookSize();
+
+              },
+              300
+            );
+
+          }
+        );
+
+
       } catch (error) {
-        console.error('Error loading PDF:', error);
-        loadingEl.innerHTML = '<div style="color:#a94442;">PDFの描画に失敗しました。<br>コンソールエラーをご確認ください。</div>';
+
+        console.error(
+          'Error loading PDF:',
+          error
+        );
+
+
+        loadingEl.innerHTML =
+          `
+          <div style="color:#a94442;">
+            PDFの描画に失敗しました。<br>
+            コンソールエラーをご確認ください。
+          </div>
+          `;
       }
     }
 
-    window.addEventListener('DOMContentLoaded', init);
+
+    /*
+     * ========================================
+     * DOM読み込み後に開始
+     * ========================================
+     */
+
+    window.addEventListener(
+      'DOMContentLoaded',
+      init
+    );
+
   </script>
+
 </body>
 </html>
