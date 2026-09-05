@@ -11,7 +11,7 @@
 
   <script src="books.js"></script>
 
-  <style>
+<style>
     :root {
       --bg-color: #f7f5f0;
       --card-bg: #ffffff;
@@ -59,14 +59,18 @@
        ======================================== */
 
     header {
-      flex: 0 0 60px;
-      height: 60px;
+      flex: 0 0 auto;
+      min-height: 60px;
+      /* スマホのノッチ（切り欠き）に被らないようにセーフエリアを確保 */
+      padding-top: env(safe-area-inset-top);
+      padding-left: max(24px, env(safe-area-inset-left));
+      padding-right: max(24px, env(safe-area-inset-right));
+
       background-color: var(--card-bg);
       border-bottom: 1px solid var(--border-color);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 24px;
       box-shadow: var(--shadow);
       z-index: 100;
     }
@@ -75,6 +79,8 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      flex: 1; /* 余白を埋める */
+      min-width: 0; /* タイトルの省略表示（...）を機能させるために必須 */
     }
 
     .title {
@@ -83,12 +89,15 @@
       letter-spacing: 0.05em;
       color: var(--text-main);
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis; /* タイトルが長すぎる場合は「...」で省略 */
     }
 
     .controls {
       display: flex;
       align-items: center;
       gap: 16px;
+      flex-shrink: 0; /* ボタン群が潰れたり押し出されたりするのを防ぐ */
     }
 
     .btn {
@@ -105,6 +114,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      white-space: nowrap; /* テキストの折り返しを防ぐ */
     }
 
     .btn:hover {
@@ -118,6 +128,7 @@
       border-radius: 50%;
       width: 36px;
       height: 36px;
+      flex-shrink: 0;
     }
 
     .page-info {
@@ -304,14 +315,14 @@
     }
 
     /* ========================================
-       スマホ
+       スマホ用調整
        ======================================== */
 
     @media (max-width: 600px) {
       header {
-        flex-basis: 52px;
-        height: 52px;
-        padding: 0 10px;
+        min-height: 52px;
+        padding-left: max(10px, env(safe-area-inset-left));
+        padding-right: max(10px, env(safe-area-inset-right));
       }
 
       .title {
@@ -323,7 +334,7 @@
       }
 
       .btn {
-        padding: 7px 12px;
+        padding: 7px 10px; /* 少しパディングを減らして画面に収める */
         font-size: 12px;
       }
 
