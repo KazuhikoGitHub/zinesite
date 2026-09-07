@@ -13,5 +13,10 @@ window.BOOKS = [
     id: 'sample3',
     file: 'sample3.pdf',
     name: '金の斧銀の斧'
+  },
+  {
+    id: 'sample4',
+    file: 'sample4.pdf',
+    name: '動物シルエット'
   }
 ];

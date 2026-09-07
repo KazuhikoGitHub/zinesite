@@ -11,7 +11,7 @@
 
   <script src="books.js"></script>
 
-<style>
+  <style>
     :root {
       --bg-color: #f7f5f0;
       --card-bg: #ffffff;
@@ -434,7 +434,6 @@
     let pageFlip = null;
     let resizeTimer = null;
     let currentPdfRatio = 1;
-    let totalPages = 0;
     let currentRenderId = 0;
 
     /*
@@ -462,13 +461,11 @@
     function toggleMenu(show) {
       if (show) {
         menuOverlay.style.display = 'block';
-        // 描画を待ってからクラス付与（アニメーション用）
         requestAnimationFrame(() => {
           menuOverlay.classList.add('active');
         });
       } else {
         menuOverlay.classList.remove('active');
-        // トランジション完了後に非表示
         setTimeout(() => {
           if (!menuOverlay.classList.contains('active')) {
             menuOverlay.style.display = 'none';
@@ -554,7 +551,9 @@
     function updatePageInfo() {
       if (!pageFlip) return;
       const current = pageFlip.getCurrentPageIndex() + 1;
-      pageInfo.textContent = `${current} / ${totalPages}`;
+      // 分割によって総ページ数が変わるため、PageFlipが認識しているページ数を取得
+      const total = pageFlip.getPageCount(); 
+      pageInfo.textContent = `${current} / ${total}`;
     }
 
     /*
@@ -563,37 +562,26 @@
      * ========================================
      */
     async function initViewer(bookId) {
-      // 処理のIDを更新し、現在のIDを保持
       const renderId = ++currentRenderId;
 
-      // 既存のPageFlipインスタンスがあれば破棄
       if (pageFlip) {
         pageFlip.destroy();
         pageFlip = null;
       }
 
-      // bookEl自体を作り直すことで、PageFlipの不要な状態やスタイルを完全にリセット
       containerEl.innerHTML = '<div id="book"></div>';
       bookEl = document.getElementById('book');
       containerEl.style.visibility = 'hidden';
       loadingEl.style.display = 'flex';
       pageInfo.textContent = '- / -';
 
-      // 該当の冊子情報を取得
       const bookInfo = window.BOOKS.find(b => b.id === bookId) || window.BOOKS[0];
-
-      // タイトルとメニューを更新
       bookTitleEl.textContent = bookInfo.name;
       buildMenu(bookInfo.id);
 
       try {
-        /*
-         * PDFの読み込み
-         */
         const pdf = await pdfjsLib.getDocument({ url: bookInfo.file }).promise;
-        totalPages = pdf.numPages;
 
-        // 別の冊子がクリックされてIDが変わっていたら処理を中断
         if (renderId !== currentRenderId) return;
 
         /*
@@ -601,46 +589,104 @@
          */
         const page1 = await pdf.getPage(1);
         const viewport1 = page1.getViewport({ scale: 1 });
-        currentPdfRatio = viewport1.width / viewport1.height;
+        let baseRatio = viewport1.width / viewport1.height;
+        
+        // もし1ページ目が既に見開きサイズ（横長）なら、単ページの比率を半分とする
+        if (baseRatio > 1.2) {
+          baseRatio = baseRatio / 2;
+        }
+        currentPdfRatio = baseRatio;
 
-        /*
-         * 全ページをCanvasに描画
-         */
         const renderScale = 2;
 
-        for (let i = 1; i <= totalPages; i++) {
-          // ループ内でもチェックを入れるとより安全
+        /*
+         * 全ページをCanvasに描画（見開き判定を含む）
+         */
+        for (let i = 1; i <= pdf.numPages; i++) {
           if (renderId !== currentRenderId) return;
           const page = await pdf.getPage(i);
           const viewport = page.getViewport({ scale: renderScale });
+          
+          const pageRatio = viewport.width / viewport.height;
 
-          const pageDiv = document.createElement('div');
-          pageDiv.className = 'page';
+          // 単ページ比率の1.5倍以上あれば「見開き（2ページ分）」と判定して分割
+          if (pageRatio > currentPdfRatio * 1.5) {
+            
+            // 全体をオフスクリーンキャンバスに描画
+            const offscreenCanvas = document.createElement('canvas');
+            offscreenCanvas.width = Math.floor(viewport.width);
+            offscreenCanvas.height = Math.floor(viewport.height);
+            const offscreenCtx = offscreenCanvas.getContext('2d', { alpha: false });
+            offscreenCtx.fillStyle = '#ffffff';
+            offscreenCtx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
 
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d', { alpha: false });
+            await page.render({
+              canvasContext: offscreenCtx,
+              viewport: viewport
+            }).promise;
 
-          canvas.width = Math.floor(viewport.width);
-          canvas.height = Math.floor(viewport.height);
+            const halfWidth = Math.floor(offscreenCanvas.width / 2);
+            const height = offscreenCanvas.height;
 
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // --- 左半分のページを作成 ---
+            const pageDivLeft = document.createElement('div');
+            pageDivLeft.className = 'page';
+            const canvasLeft = document.createElement('canvas');
+            canvasLeft.width = halfWidth;
+            canvasLeft.height = height;
+            const ctxLeft = canvasLeft.getContext('2d', { alpha: false });
+            ctxLeft.drawImage(offscreenCanvas, 0, 0, halfWidth, height, 0, 0, halfWidth, height);
+            pageDivLeft.appendChild(canvasLeft);
 
-          await page.render({
-            canvasContext: ctx,
-            viewport: viewport
-          }).promise;
+            // --- 右半分のページを作成 ---
+            const pageDivRight = document.createElement('div');
+            pageDivRight.className = 'page';
+            const canvasRight = document.createElement('canvas');
+            canvasRight.width = offscreenCanvas.width - halfWidth; // 端数のズレ防止
+            canvasRight.height = height;
+            const ctxRight = canvasRight.getContext('2d', { alpha: false });
+            ctxRight.drawImage(offscreenCanvas, halfWidth, 0, canvasRight.width, height, 0, 0, canvasRight.width, height);
+            pageDivRight.appendChild(canvasRight);
 
-          pageDiv.appendChild(canvas);
-          bookEl.appendChild(pageDiv);
+            // ★ 日本の同人誌や漫画など「右開き」の冊子の場合は、右半分を先に読ませるため、
+            // 以下の2行の追加順序を逆にしてください。
+            // 【右開きの場合】
+            // bookEl.appendChild(pageDivRight);
+            // bookEl.appendChild(pageDivLeft);
+            
+            // 【左開き（デフォルト・一般書籍）の場合】
+            bookEl.appendChild(pageDivLeft);
+            bookEl.appendChild(pageDivRight);
+
+          } else {
+            // 見開きでない場合は通常通り1ページとして描画
+            const pageDiv = document.createElement('div');
+            pageDiv.className = 'page';
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d', { alpha: false });
+
+            canvas.width = Math.floor(viewport.width);
+            canvas.height = Math.floor(viewport.height);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            await page.render({
+              canvasContext: ctx,
+              viewport: viewport
+            }).promise;
+
+            pageDiv.appendChild(canvas);
+            bookEl.appendChild(pageDiv);
+          }
         }
 
         /*
-                 * PageFlip初期化
-                 */
+         * PageFlip初期化
+         */
         const initialSize = calculateBookSize();
 
-        // ★修正：PageFlipを生成する前に、親の #book 要素に見開き幅と高さを設定する
         bookEl.style.width = `${initialSize.width * 2}px`;
         bookEl.style.height = `${initialSize.height}px`;
 
@@ -662,7 +708,6 @@
           swipeDistance: 30
         });
 
-        // 描画された .page 要素が確実にDOMに存在することを確認してからロード
         const pageElements = bookEl.querySelectorAll('.page');
         if (pageElements.length > 0) {
           pageFlip.loadFromHTML(pageElements);
@@ -670,14 +715,8 @@
           throw new Error('ページ要素が生成されていません');
         }
 
-        /*
-         * ページめくりイベント登録
-         */
         pageFlip.on('flip', updatePageInfo);
 
-        /*
-         * 表示の更新
-         */
         loadingEl.style.display = 'none';
         containerEl.style.visibility = 'visible';
 
@@ -696,9 +735,7 @@
     }
 
     /*
-     * ========================================
-     * イベントリスナーの登録（一度だけ実行）
-     * ========================================
+     * イベントリスナー
      */
     prevBtn.addEventListener('click', () => {
       if (pageFlip) pageFlip.flipPrev();
@@ -724,11 +761,6 @@
       setTimeout(() => updateBookSize(), 300);
     });
 
-    /*
-     * ========================================
-     * DOM読み込み後に最初の冊子をロード
-     * ========================================
-     */
     window.addEventListener('DOMContentLoaded', () => {
       if (window.BOOKS && window.BOOKS.length > 0) {
         initViewer(window.BOOKS[0].id);
