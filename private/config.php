@@ -3,8 +3,8 @@
 return [
     'db' => [
         'dsn' => 'mysql:host=mysql403.phy.lolipop.lan;dbname=LAA1475494-mkazu;charset=utf8mb4',
-        'user' => '【書き換え】',
-        'password' => '【書き換え】',
+        'user' => '書き換え',
+        'password' => '書き換え',
     ],
     'app' => [
         'base_url' => 'https://mkazu.hiho.jp/zinesite/yohaku',
