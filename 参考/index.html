@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>デジタルブック</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+
+  <script src="books.js"></script>
+
+  <style>
+    :root {
+      --bg-color: #f7f5f0;
+      --card-bg: #ffffff;
+      --text-main: #4a453e;
+      --text-sub: #8c857b;
+      --accent-color: #889887;
+      --border-color: #e5e0d8;
+      --shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        "Helvetica Neue",
+        Arial,
+        sans-serif;
+
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      touch-action: none;
+    }
+
+    /* ========================================
+       スタイリッシュ透過UI & フェードアウトアニメーション
+       ======================================== */
+    .floating-btn,
+    .zoom-controls,
+    .page-info-badge {
+      transition: opacity 0.6s ease, visibility 0.6s ease, transform 0.15s, background 0.2s, color 0.2s;
+      opacity: 1;
+      visibility: visible;
+    }
+
+    /* UI非表示（フェードアウト）状態 */
+    body.ui-hidden .floating-btn,
+    body.ui-hidden .zoom-controls,
+    body.ui-hidden .page-info-badge {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .floating-btn {
+      position: fixed;
+      z-index: 100;
+      background: rgba(255, 255, 255, 0.45);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      color: var(--text-main);
+      touch-action: manipulation;
+      user-select: none;
+    }
+
+    .floating-btn:hover,
+    .floating-btn:active {
+      background: rgba(255, 255, 255, 0.85);
+      color: #000;
+      transform: scale(1.05);
+    }
+
+    /* メニューボタン */
+    .menu-btn {
+      top: max(16px, env(safe-area-inset-top));
+      left: max(16px, env(safe-area-inset-left));
+      width: 48px;
+      height: 48px;
+    }
+
+    /* ズームコントロール */
+    .zoom-controls {
+      position: fixed;
+      top: max(16px, env(safe-area-inset-top));
+      right: max(16px, env(safe-area-inset-right));
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .zoom-btn {
+      width: 44px;
+      height: 44px;
+      position: relative;
+    }
+
+    /* 矢印ボタン */
+    .nav-btn {
+      width: 56px;
+      height: 56px;
+    }
+
+    .nav-btn svg {
+      width: 28px;
+      height: 28px;
+    }
+
+    /* ページ数表示バッジ */
+    .page-info-badge {
+      position: fixed;
+      z-index: 100;
+      background: rgba(255, 255, 255, 0.45);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      border-radius: 20px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+      box-shadow: var(--shadow);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    /* --- 縦余白モード (上下余白) --- */
+    .layout-vertical #prev-btn {
+      bottom: max(16px, env(safe-area-inset-bottom));
+      left: calc(50% - 90px);
+      top: auto;
+      transform: translateX(-50%);
+    }
+
+    .layout-vertical #page-info {
+      bottom: max(22px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .layout-vertical #next-btn {
+      bottom: max(16px, env(safe-area-inset-bottom));
+      left: calc(50% + 90px);
+      top: auto;
+      transform: translateX(-50%);
+    }
+
+    /* --- 横余白モード (左右余白) --- */
+    .layout-horizontal #prev-btn {
+      top: 50%;
+      left: max(16px, env(safe-area-inset-left));
+      transform: translateY(-50%);
+      bottom: auto;
+    }
+
+    .layout-horizontal #page-info {
+      bottom: max(16px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .layout-horizontal #next-btn {
+      top: 50%;
+      right: max(16px, env(safe-area-inset-right));
+      transform: translateY(-50%);
+      bottom: auto;
+    }
+
+    /* ========================================
+       メニュー（オーバーレイ）
+       ======================================== */
+
+    #menu-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(74, 69, 62, 0.6);
+      z-index: 1000;
+      display: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #menu-overlay.active {
+      display: block;
+      opacity: 1;
+    }
+
+    #menu-content {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 280px;
+      height: 100%;
+      background-color: var(--bg-color);
+      box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
+      transform: translateX(-100%);
+      transition: transform 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #menu-overlay.active #menu-content {
+      transform: translateX(0);
+    }
+
+    .menu-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: var(--card-bg);
+      flex: 0 0 auto;
+    }
+
+    .menu-header h3 {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    #book-list {
+      list-style: none;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    #book-list li {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    #book-list li:hover {
+      background-color: #ebe7de;
+    }
+
+    #book-list li.active-book {
+      background-color: var(--accent-color);
+      color: #ffffff;
+    }
+
+    /* ========================================
+       ブック表示領域
+       ======================================== */
+
+    main {
+      flex: 1;
+      width: 100%;
+      height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      overflow: hidden;
+    }
+
+    #book-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      visibility: hidden;
+      position: relative;
+      cursor: grab;
+    }
+
+    #book-container:active {
+      cursor: grabbing;
+    }
+
+    #book {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform-origin: center center;
+      will-change: transform;
+    }
+
+    .page {
+      background-color: #ffffff;
+      box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.03);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      contain: layout paint;
+    }
+
+    .page canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      image-rendering: auto;
+    }
+
+    /* ========================================
+       ローディング画面
+       ======================================== */
+
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      color: var(--text-sub);
+      font-size: 14px;
+      z-index: 200;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--border-color);
+      border-top: 3px solid var(--accent-color);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body class="layout-horizontal">
+
+  <!-- 左上固定：ハンバーガーメニュー -->
+  <button class="floating-btn menu-btn" id="menu-btn" aria-label="メニュー">
+    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none"
+      stroke-linecap="round" stroke-linejoin="round">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </button>
+
+  <!-- ナビゲーションUI (矢印 & ページ数) -->
+  <button class="floating-btn nav-btn" id="prev-btn" aria-label="前へ">
+    <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"
+      stroke-linejoin="round">
+      <polyline points="15 18 9 12 15 6"></polyline>
+    </svg>
+  </button>
+
+  <div class="page-info-badge" id="page-info">- / -</div>
+
+  <button class="floating-btn nav-btn" id="next-btn" aria-label="次へ">
+    <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"
+      stroke-linejoin="round">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </button>
+
+
+  <!-- サイドメニュー -->
+  <div id="menu-overlay">
+    <div id="menu-content">
+      <div class="menu-header">
+        <h3>冊子を選択</h3>
+        <button class="floating-btn" style="position:relative; width:36px; height:36px; z-index:1;" id="menu-close-btn"
+          aria-label="閉じる">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <ul id="book-list">
+      </ul>
+    </div>
+  </div>
+
+
+  <!-- メインエリア -->
+  <main id="main-area">
+    <div id="loading">
+      <div class="spinner"></div>
+      <div>PDFを読み込んでいます...</div>
+    </div>
+
+    <div id="book-container">
+      <div id="book"></div>
+    </div>
+  </main>
+
+
+  <script>
+    /*
+     * PDF.js Worker
+     */
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let pageFlip = null;
+    let currentPdfRatio = 1;
+    let currentRenderId = 0;
+
+    // ズーム＆パン（位置移動）管理変数
+    let currentScale = 1.0;
+    const minScale = 1.0;
+    const maxScale = 3.0;
+    const zoomStep = 0.25;
+
+    let panX = 0;
+    let panY = 0;
+    let startX = 0;
+    let startY = 0;
+    let startPanX = 0;
+    let startPanY = 0;
+    let isDragging = false;
+    let isMoved = false;
+
+    const loadingEl = document.getElementById('loading');
+    const containerEl = document.getElementById('book-container');
+    const mainArea = document.getElementById('main-area');
+    let bookEl = document.getElementById('book');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const pageInfo = document.getElementById('page-info');
+
+    // メニュー関連
+    const menuBtn = document.getElementById('menu-btn');
+    const menuCloseBtn = document.getElementById('menu-close-btn');
+    const menuOverlay = document.getElementById('menu-overlay');
+    const bookList = document.getElementById('book-list');
+
+    /*
+     * UI表示制御（自動非表示・復帰処理）
+     */
+    function hideUI() {
+      document.body.classList.add('ui-hidden');
+    }
+
+    function showUI() {
+      document.body.classList.remove('ui-hidden');
+    }
+
+    function toggleUI() {
+      document.body.classList.toggle('ui-hidden');
+    }
+
+    /*
+     * ズーム & パン変換適用
+     */
+    function updateTransform() {
+      if (bookEl) {
+        bookEl.style.transform = `translate(${panX}px, ${panY}px) scale(${currentScale})`;
+      }
+    }
+
+    function applyZoom(scale) {
+      currentScale = Math.min(Math.max(scale, minScale), maxScale);
+      if (currentScale === 1.0) {
+        panX = 0;
+        panY = 0;
+      }
+      updateTransform();
+    }
+
+    /*
+     * なぞる操作（ドラッグ/パン移動）処理
+     */
+    function handlePointerDown(clientX, clientY) {
+      isDragging = true;
+      isMoved = false;
+      startX = clientX;
+      startY = clientY;
+      startPanX = panX;
+      startPanY = panY;
+    }
+
+    function handlePointerMove(clientX, clientY) {
+      if (!isDragging) return;
+      const dx = clientX - startX;
+      const dy = clientY - startY;
+
+      if (Math.hypot(dx, dy) > 8) {
+        isMoved = true;
+      }
+
+      panX = startPanX + dx;
+      panY = startPanY + dy;
+      updateTransform();
+    }
+
+    function handlePointerUp() {
+      isDragging = false;
+    }
+
+    // メインエリア全体でドラッグ移動を検知
+    mainArea.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.floating-btn') || e.target.closest('#menu-overlay') || e.target.closest('.zoom-controls')) return;
+      handlePointerDown(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      handlePointerMove(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('mouseup', () => {
+      handlePointerUp();
+    });
+
+    mainArea.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        if (e.target.closest('.floating-btn') || e.target.closest('#menu-overlay') || e.target.closest('.zoom-controls')) return;
+        handlePointerDown(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
+
+    mainArea.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 1) {
+        handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
+
+    mainArea.addEventListener('touchend', () => {
+      handlePointerUp();
+    }, { passive: true });
+
+
+    /*
+     * タップ判定（PDFの外側でUIトグル / PDFの内側左右1/3でページめくり）
+     */
+    mainArea.addEventListener('click', (e) => {
+      // ドラッグ（なぞり移動）やピンチズームをした場合はタップ処理を行わない
+      if (isMoved) {
+        isMoved = false;
+        return;
+      }
+
+      // UIボタンやメニュー操作時は何もしない
+      if (e.target.closest('.floating-btn') || e.target.closest('#menu-overlay')) {
+        return;
+      }
+
+      const bookContainer = e.target.closest('#book-container');
+
+      if (bookContainer) {
+        // 拡大（ズーム）中はPDF内タップでもアイコンの表示/非表示を切り替える
+        if (currentScale > 1.0) {
+          toggleUI();
+          return;
+        }
+
+        // --- PDF領域内をタップした場合（等倍時のみ）---
+        const rect = bookContainer.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const width = rect.width;
+
+        if (clickX < width / 3) {
+          if (pageFlip) pageFlip.flipPrev();
+        } else if (clickX > (width * 2) / 3) {
+          if (pageFlip) pageFlip.flipNext();
+        }
+        // 中央1/3タップ時は何も行わない
+
+      } else {
+        // --- PDF領域外（背景余白）をタップした場合 ---
+        toggleUI();
+      }
+    });
+
+    // ピンチズーム（スマホの2本指操作）のサポート
+    let initialPinchDist = null;
+    let initialScale = 1.0;
+
+    mainArea.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        isDragging = false;
+        initialPinchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        initialScale = currentScale;
+      }
+    }, { passive: true });
+
+    mainArea.addEventListener('touchmove', (e) => {
+      isMoved = true;
+      if (e.touches.length === 2 && initialPinchDist) {
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const factor = dist / initialPinchDist;
+        applyZoom(initialScale * factor);
+      }
+    }, { passive: true });
+
+    mainArea.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) {
+        initialPinchDist = null;
+      }
+    }, { passive: true });
+
+
+    /*
+     * メニューの制御
+     */
+    function toggleMenu(show) {
+      if (show) {
+        menuOverlay.style.display = 'block';
+        requestAnimationFrame(() => {
+          menuOverlay.classList.add('active');
+        });
+      } else {
+        menuOverlay.classList.remove('active');
+        setTimeout(() => {
+          if (!menuOverlay.classList.contains('active')) {
+            menuOverlay.style.display = 'none';
+          }
+        }, 300);
+      }
+    }
+
+    menuBtn.addEventListener('click', () => toggleMenu(true));
+    menuCloseBtn.addEventListener('click', () => toggleMenu(false));
+    menuOverlay.addEventListener('click', (e) => {
+      if (e.target === menuOverlay) toggleMenu(false);
+    });
+
+    function buildMenu(activeBookId) {
+      bookList.innerHTML = '';
+      if (!window.BOOKS) return;
+
+      window.BOOKS.forEach(book => {
+        const li = document.createElement('li');
+        li.textContent = book.name;
+
+        if (book.id === activeBookId) {
+          li.classList.add('active-book');
+        }
+
+        li.addEventListener('click', () => {
+          toggleMenu(false);
+          if (book.id !== activeBookId) {
+            initViewer(book.id);
+          }
+        });
+        bookList.appendChild(li);
+      });
+    }
+
+    /*
+     * ページ情報更新
+     */
+    function updatePageInfo() {
+      if (!pageFlip) return;
+      const current = pageFlip.getCurrentPageIndex() + 1;
+      const total = pageFlip.getPageCount();
+      pageInfo.textContent = `${current} / ${total}`;
+    }
+
+    /*
+     * サイズ計算・初期レイアウト確定
+     */
+    function calculateBookSize() {
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      const margin = 20;
+      const usableWidth = Math.max(1, viewportWidth - margin * 2);
+      const usableHeight = Math.max(1, viewportHeight - margin * 2);
+
+      let pageHeight = usableHeight;
+      let pageWidth = pageHeight * currentPdfRatio;
+      let spreadWidth = pageWidth * 2;
+
+      if (spreadWidth > usableWidth) {
+        spreadWidth = usableWidth;
+        pageWidth = spreadWidth / 2;
+        pageHeight = pageWidth / currentPdfRatio;
+      }
+
+      const finalWidth = Math.floor(pageWidth);
+      const finalHeight = Math.floor(pageHeight);
+
+      const marginX = viewportWidth - (finalWidth * 2);
+      const marginY = viewportHeight - finalHeight;
+
+      if (marginY > marginX) {
+        document.body.classList.remove('layout-horizontal');
+        document.body.classList.add('layout-vertical');
+      } else {
+        document.body.classList.remove('layout-vertical');
+        document.body.classList.add('layout-horizontal');
+      }
+
+      return {
+        width: finalWidth,
+        height: finalHeight
+      };
+    }
+
+    /*
+     * PDF初期化・再読み込み
+     */
+    async function initViewer(bookId) {
+      const renderId = ++currentRenderId;
+
+      applyZoom(1.0);
+      showUI();
+
+      if (pageFlip) {
+        pageFlip.destroy();
+        pageFlip = null;
+      }
+
+      containerEl.innerHTML = '<div id="book"></div>';
+      bookEl = document.getElementById('book');
+      containerEl.style.visibility = 'hidden';
+      loadingEl.style.display = 'flex';
+      pageInfo.textContent = '- / -';
+
+      const bookInfo = window.BOOKS.find(b => b.id === bookId) || window.BOOKS[0];
+      buildMenu(bookInfo.id);
+
+      try {
+        const pdf = await pdfjsLib.getDocument({ url: bookInfo.file }).promise;
+
+        if (renderId !== currentRenderId) return;
+
+        const page1 = await pdf.getPage(1);
+        const viewport1 = page1.getViewport({ scale: 1 });
+        let baseRatio = viewport1.width / viewport1.height;
+
+        if (baseRatio > 1.2) {
+          baseRatio = baseRatio / 2;
+        }
+        currentPdfRatio = baseRatio;
+
+        const renderScale = 2;
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          if (renderId !== currentRenderId) return;
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: renderScale });
+
+          const pageRatio = viewport.width / viewport.height;
+
+          if (pageRatio > currentPdfRatio * 1.5) {
+            const offscreenCanvas = document.createElement('canvas');
+            offscreenCanvas.width = Math.floor(viewport.width);
+            offscreenCanvas.height = Math.floor(viewport.height);
+            const offscreenCtx = offscreenCanvas.getContext('2d', { alpha: false });
+            offscreenCtx.fillStyle = '#ffffff';
+            offscreenCtx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+
+            await page.render({
+              canvasContext: offscreenCtx,
+              viewport: viewport
+            }).promise;
+
+            const halfWidth = Math.floor(offscreenCanvas.width / 2);
+            const height = offscreenCanvas.height;
+
+            const pageDivLeft = document.createElement('div');
+            pageDivLeft.className = 'page';
+            const canvasLeft = document.createElement('canvas');
+            canvasLeft.width = halfWidth;
+            canvasLeft.height = height;
+            const ctxLeft = canvasLeft.getContext('2d', { alpha: false });
+            ctxLeft.drawImage(offscreenCanvas, 0, 0, halfWidth, height, 0, 0, halfWidth, height);
+            pageDivLeft.appendChild(canvasLeft);
+
+            const pageDivRight = document.createElement('div');
+            pageDivRight.className = 'page';
+            const canvasRight = document.createElement('canvas');
+            canvasRight.width = offscreenCanvas.width - halfWidth;
+            canvasRight.height = height;
+            const ctxRight = canvasRight.getContext('2d', { alpha: false });
+            ctxRight.drawImage(offscreenCanvas, halfWidth, 0, canvasRight.width, height, 0, 0, canvasRight.width, height);
+            pageDivRight.appendChild(canvasRight);
+
+            bookEl.appendChild(pageDivLeft);
+            bookEl.appendChild(pageDivRight);
+
+          } else {
+            const pageDiv = document.createElement('div');
+            pageDiv.className = 'page';
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d', { alpha: false });
+
+            canvas.width = Math.floor(viewport.width);
+            canvas.height = Math.floor(viewport.height);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            await page.render({
+              canvasContext: ctx,
+              viewport: viewport
+            }).promise;
+
+            pageDiv.appendChild(canvas);
+            bookEl.appendChild(pageDiv);
+          }
+        }
+
+        const initialSize = calculateBookSize();
+
+        bookEl.style.width = `${initialSize.width * 2}px`;
+        bookEl.style.height = `${initialSize.height}px`;
+
+        pageFlip = new St.PageFlip(bookEl, {
+          width: initialSize.width,
+          height: initialSize.height,
+          size: 'stretch',
+          minWidth: initialSize.width,
+          minHeight: initialSize.height,
+          maxWidth: initialSize.width,
+          maxHeight: initialSize.height,
+          usePortrait: false,
+          showCover: true,
+          mobileScrollSupport: false,
+          maxShadowOpacity: 0.15,
+          useMouseEvents: false,
+          disableFlipByClick: true,
+          flippingTime: 700
+        });
+
+        const pageElements = bookEl.querySelectorAll('.page');
+        if (pageElements.length > 0) {
+          pageFlip.loadFromHTML(pageElements);
+        } else {
+          throw new Error('ページ要素が生成されていません');
+        }
+
+        pageFlip.on('flip', () => {
+          updatePageInfo();
+          applyZoom(1.0);
+        });
+
+        loadingEl.style.display = 'none';
+        containerEl.style.visibility = 'visible';
+
+        updatePageInfo();
+
+      } catch (error) {
+        console.error('Error loading PDF:', error);
+        loadingEl.innerHTML = `
+          <div style="color:#a94442;">
+            PDFの描画に失敗しました。<br>
+            コンソールエラーをご確認ください。
+          </div>
+        `;
+      }
+    }
+
+    prevBtn.addEventListener('click', () => {
+      if (pageFlip) pageFlip.flipPrev();
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (pageFlip) pageFlip.flipNext();
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.BOOKS && window.BOOKS.length > 0) {
+        initViewer(window.BOOKS[0].id);
+      } else {
+        loadingEl.innerHTML = '冊子データが見つかりません (books.js を確認してください)';
+      }
+    });
+
+  </script>
+</body>
+
+</html>

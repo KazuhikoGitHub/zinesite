@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^sed -n '52p' app\\.js \\| fold -w 160$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

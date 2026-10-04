@@ -1,0 +1,95 @@
+USE `LAA1475494-mkazu`;
+
+CREATE TABLE zine_users (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  email_verified_at DATETIME NULL,
+  email_verification_token_hash CHAR(64) NULL UNIQUE,
+  email_verification_expires_at DATETIME NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  display_name VARCHAR(80) NOT NULL,
+  bio TEXT NULL,
+  role ENUM('reader','creator','admin') NOT NULL DEFAULT 'reader',
+  status ENUM('active','suspended','banned') NOT NULL DEFAULT 'active',
+  totp_secret VARBINARY(255) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE zines (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  author_id BIGINT UNSIGNED NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  slug VARCHAR(220) NOT NULL UNIQUE,
+  description TEXT NOT NULL,
+  cover_path VARCHAR(500) NULL,
+  category VARCHAR(80) NOT NULL,
+  age_restricted BOOLEAN NOT NULL DEFAULT FALSE,
+  status ENUM('draft','published','private') NOT NULL DEFAULT 'draft',
+  view_count INT UNSIGNED NOT NULL DEFAULT 0,
+  favorite_count INT UNSIGNED NOT NULL DEFAULT 0,
+  published_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (author_id) REFERENCES zine_users(id),
+  INDEX idx_zines_status_published (status, published_at),
+  INDEX idx_zines_category (category)
+);
+CREATE TABLE zine_pages (id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT, zine_id BIGINT UNSIGNED NOT NULL, page_number SMALLINT UNSIGNED NOT NULL, file_path VARCHAR(500) NOT NULL, FOREIGN KEY (zine_id) REFERENCES zines(id) ON DELETE CASCADE, UNIQUE KEY uq_zine_page (zine_id, page_number));
+CREATE TABLE favorites (user_id BIGINT UNSIGNED NOT NULL, zine_id BIGINT UNSIGNED NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, zine_id), FOREIGN KEY (user_id) REFERENCES zine_users(id) ON DELETE CASCADE, FOREIGN KEY (zine_id) REFERENCES zines(id) ON DELETE CASCADE);
+CREATE TABLE reading_history (user_id BIGINT UNSIGNED NOT NULL, zine_id BIGINT UNSIGNED NOT NULL, last_page SMALLINT UNSIGNED NOT NULL DEFAULT 1, viewed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (user_id, zine_id), FOREIGN KEY (user_id) REFERENCES zine_users(id) ON DELETE CASCADE, FOREIGN KEY (zine_id) REFERENCES zines(id) ON DELETE CASCADE);
+CREATE TABLE reports (id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT, reporter_id BIGINT UNSIGNED NULL, zine_id BIGINT UNSIGNED NULL, reason VARCHAR(100) NOT NULL, detail TEXT NOT NULL, status ENUM('open','reviewing','resolved') NOT NULL DEFAULT 'open', created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (reporter_id) REFERENCES zine_users(id) ON DELETE SET NULL, FOREIGN KEY (zine_id) REFERENCES zines(id) ON DELETE SET NULL);
+CREATE TABLE security_logs (id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT, user_id BIGINT UNSIGNED NULL, event VARCHAR(100) NOT NULL, ip_address VARBINARY(16) NOT NULL, user_agent VARCHAR(500) NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES zine_users(id) ON DELETE SET NULL);
+CREATE TABLE password_reset_tokens (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  token_hash CHAR(64) NOT NULL UNIQUE,
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES zine_users(id) ON DELETE CASCADE,
+  INDEX idx_password_reset_user (user_id),
+  INDEX idx_password_reset_expiry (expires_at)
+);
+CREATE TABLE zine_view_events (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  zine_id BIGINT UNSIGNED NOT NULL,
+  user_id BIGINT UNSIGNED NULL,
+  ip_address VARBINARY(16) NULL,
+  viewed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (zine_id) REFERENCES zines(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES zine_users(id) ON DELETE SET NULL,
+  INDEX idx_view_events_zine_date (zine_id, viewed_at)
+);
+CREATE TABLE user_sessions (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  session_id_hash CHAR(64) NOT NULL UNIQUE,
+  ip_address VARBINARY(16) NULL,
+  user_agent VARCHAR(500) NULL,
+  last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES zine_users(id) ON DELETE CASCADE,
+  INDEX idx_user_sessions_user (user_id)
+);
+CREATE TABLE zine_tags (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(50) NOT NULL UNIQUE
+);
+CREATE TABLE zine_tag_links (
+  zine_id BIGINT UNSIGNED NOT NULL,
+  tag_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (zine_id, tag_id),
+  FOREIGN KEY (zine_id) REFERENCES zines(id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES zine_tags(id) ON DELETE CASCADE
+);
+CREATE TABLE contact_messages (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NULL,
+  email VARCHAR(255) NOT NULL,
+  subject VARCHAR(200) NOT NULL,
+  message TEXT NOT NULL,
+  status ENUM('open','in_progress','closed') NOT NULL DEFAULT 'open',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES zine_users(id) ON DELETE SET NULL,
+  INDEX idx_contact_status (status, created_at)
+);
